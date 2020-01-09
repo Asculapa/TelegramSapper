@@ -2,7 +2,7 @@ package com.shakal.SapperBot;
 
 import com.shakal.BotConfig;
 
-class Emoji {
+abstract class Emoji {
     static final String closedCell = BotConfig.getStringProperty("sapperBot.game.emoji.closedCell");
     static final String flag = BotConfig.getStringProperty("sapperBot.game.emoji.flag");
     static final String bomb = BotConfig.getStringProperty("sapperBot.game.emoji.bomb");

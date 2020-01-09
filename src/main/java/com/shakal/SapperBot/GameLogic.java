@@ -18,6 +18,9 @@ import java.util.logging.Logger;
     private static final int fieldHeight = BotConfig.getIntProperty("sapperBot.game.fieldHeight");
     private static final int bombCount = BotConfig.getIntProperty("sapperBot.game.bombCount");
 
+    private enum Command{
+        START, CHANGE_TOOL
+    }
 
      static InlineKeyboardMarkup buildField(){
 
@@ -25,12 +28,12 @@ import java.util.logging.Logger;
         for (int k = 0; k < fieldHeight; k++) {
             List<InlineKeyboardButton> rowInline = new ArrayList<>();
             for (int m = 0; m < fieldWidth; m++) {
-                rowInline.add(new InlineKeyboardButton().setText(Emoji.closedCell).setCallbackData("start"));
+                rowInline.add(new InlineKeyboardButton().setText(Emoji.closedCell).setCallbackData(Command.START.name()));
             }
             field.add(rowInline);
         }
+        field.add(Collections.singletonList(new InlineKeyboardButton().setText(Emoji.flag).setCallbackData(Command.CHANGE_TOOL.name())));
 
-        field.add(Collections.singletonList(new InlineKeyboardButton().setText(Emoji.flag).setCallbackData("flag")));
         return new InlineKeyboardMarkup().setKeyboard(field);
     }
 }

@@ -5,8 +5,11 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.util.List;
 import java.util.logging.Logger;
 
 public class SapperBot extends TelegramLongPollingBot {
@@ -17,6 +20,13 @@ public class SapperBot extends TelegramLongPollingBot {
         if (hasCommand(update, BotConfig.getStringProperty("sapperBot.commands.start"))){
             SendMessage message = new SendMessage().setText("SAPPER").setChatId(update.getMessage().getChatId()).setReplyMarkup(GameLogic.buildField()).enableMarkdown(true);
             sendMessage(message);
+        }else if (update.hasCallbackQuery()){
+            List<List<InlineKeyboardButton>> buttons = update
+                    .getCallbackQuery()
+                    .getMessage()
+                    .getReplyMarkup()
+                    .getKeyboard();
+
         }
     }
 
