@@ -21,8 +21,17 @@ public abstract class BotConfig {
         }
     }
 
-    public static String getProperty(String key){
+    public static String getStringProperty(String key) {
         return prop.getProperty(key, "undefined");
     }
 
+    public static Integer getIntProperty(String key) {
+        int result = 0;
+        try {
+            result = Integer.valueOf(getStringProperty(key));
+        } catch (NumberFormatException ex) {
+            ex.printStackTrace();
+        }
+        return result;
+    }
 }
