@@ -1,9 +1,13 @@
-package com.shakal.SapperBot;
+package com.shakal.sapper.logic.manager;
 
 import com.shakal.BotConfig;
 import com.shakal.EnumUtils;
+import com.shakal.sapper.Emoji;
+import com.shakal.sapper.logic.entity.Cell;
+import com.shakal.sapper.logic.entity.Field;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
@@ -11,72 +15,86 @@ import java.util.*;
 import java.util.logging.Logger;
 
 
-class GameLogic {
+class LogicManager {
 
-    private final static Logger logger = Logger.getLogger(GameLogic.class.getSimpleName());
+    private final static Logger logger = Logger.getLogger(LogicManager.class.getSimpleName());
 
-    private static final int FIELD_WIDTH = BotConfig.getIntProperty("sapperBot.game.fieldWidth");
-    private static final int FIELD_HEIGHT = BotConfig.getIntProperty("sapperBot.game.fieldHeight");
-    private static final int BOMB_COUNT = BotConfig.getIntProperty("sapperBot.game.bombCount");
-    private static String resultMessage;
-    private static List<List<InlineKeyboardButton>> fullKeyboard;
+    private static String messageText;
+    private static Message message;
+    private static List<List<InlineKeyboardButton>> keyboard;
+    private static InlineKeyboardButton toolButton;
+    private static User user;
+    private static int bombCount;
 
     private enum Command {
         START, CHANGE_TOOL, DEFEAT, NULL, OPEN
     }
 
-    static InlineKeyboardMarkup buildEmptyField() {
+    static InlineKeyboardMarkup buildEmptyField(Field field) {
 
-        List<List<InlineKeyboardButton>> field = new ArrayList<>();
-        for (int y = 0; y < FIELD_HEIGHT; y++) {
+        List<List<InlineKeyboardButton>> inlineKeyboard = new ArrayList<>();
+        for (int y = 0; y < field.getHeight(); y++) {
             List<InlineKeyboardButton> rowInline = new ArrayList<>();
-            for (int x = 0; x < FIELD_WIDTH; x++) {
+            for (int x = 0; x < field.getWidth(); x++) {
                 rowInline.add(new InlineKeyboardButton()
                         .setText(Emoji.closedCell)
-                        .setCallbackData(y + " " + x + " " + Command.START.name() + " 0"));
+                        .setCallbackData(y + " " + x + " " + Command.START.name() + " " + field.getBombs()));
             }
-            field.add(rowInline);
+            inlineKeyboard.add(rowInline);
         }
 
-        field.add(Collections.singletonList(new InlineKeyboardButton()
-                .setText(Emoji.flag)
-                .setCallbackData(Command.CHANGE_TOOL.name() + " " + BOMB_COUNT))); //Review
-        return new InlineKeyboardMarkup().setKeyboard(field);
+        inlineKeyboard.add(Collections.singletonList(new InlineKeyboardButton()
+                .setText(Emoji.magnifier)
+                .setCallbackData(Command.CHANGE_TOOL.name() + " " + field.getBombs()))); //Review
+        return new InlineKeyboardMarkup().setKeyboard(inlineKeyboard);
     }
 
 
-    static Optional<EditMessageText> analyze(Message message, String callbackQueryData) {
-
+    static EditMessageText analyze(Message message, String callbackQueryData, User user) {
         if (isOpened(callbackQueryData)) {
-            return Optional.empty();
-        }
-
-        List<List<InlineKeyboardButton>> keyboard = message.getReplyMarkup().getKeyboard();
-        InlineKeyboardButton toolButton = getToolButton(keyboard);
-        resultMessage = message.getText();
-        fullKeyboard = keyboard;
-
-        if (isTool(callbackQueryData)) {
-            changeTool(toolButton);
+            changeMessageText(BotConfig.getStringProperty("sapperBot.message.clickOnOpenedCell"));
         } else {
-            int y = getY(callbackQueryData);
-            int x = getX(callbackQueryData);
+            initVars(message, user);
 
-            if (flagSelected(toolButton)) {
-                changeIcon(keyboard, y, x);// Set number of flags + check whole field if count == 0
+            if (isTool(callbackQueryData)) {
+                changeTool();
             } else {
-                Command command = getCommand(callbackQueryData);
-                List<List<InlineKeyboardButton>> gameKeyboard = getGameKeyboard(keyboard);
-                executeCommand(command, gameKeyboard, y, x);
+                int y = getY(callbackQueryData);
+                int x = getX(callbackQueryData);
+
+                if (flagSelected()) {
+                    changeIcon(y, x);// Set number of flags + check whole field if count == 0
+                } else {
+                    Command command = getCommand(callbackQueryData);
+                    List<List<InlineKeyboardButton>> gameKeyboard = getGameKeyboard();
+                    executeCommand(command, gameKeyboard, y, x);
+                }
             }
         }
 
-        return Optional.of(new EditMessageText()
+        return new EditMessageText()
                 .setMessageId(message.getMessageId())
                 .setChatId(message.getChatId())
-                .setText(resultMessage)
-                .setReplyMarkup(message.getReplyMarkup())
-                .enableMarkdown(true));
+                .setText(messageText)
+                .setReplyMarkup(message.getReplyMarkup());
+    }
+
+    private static void changeMessageText(String newMessageText) {
+        String invisibleText = "\u200E";
+
+        if (messageText.contains(invisibleText)) {
+            messageText = messageText.replace(invisibleText, "");
+        } else {
+            messageText = messageText.equals(newMessageText) ? messageText + invisibleText : newMessageText;
+        }
+    }
+
+    private static void initVars(Message message, User user) {
+        LogicManager.message = message;
+        LogicManager.keyboard = message.getReplyMarkup().getKeyboard();
+        LogicManager.messageText = message.getText();
+        LogicManager.toolButton = getToolButton();
+        LogicManager.user = user;
     }
 
     private static int getX(String callbackQueryData) {
@@ -84,9 +102,9 @@ class GameLogic {
         return Integer.valueOf(x);
     }
 
-    private static void changeIcon(List<List<InlineKeyboardButton>> keyboard, int y, int x) {
+    private static void changeIcon(int y, int x) {
         String icon = keyboard.get(y).get(x).getText();
-        InlineKeyboardButton toolButton = getToolButton(keyboard);
+        InlineKeyboardButton toolButton = getToolButton();
         int flagCount = getFlagCount(toolButton.getCallbackData());
 
         String newIcon = Emoji.closedCell;
@@ -98,22 +116,33 @@ class GameLogic {
         }
 
         if (flagCount >= 0) {
-            setFlagCount(toolButton, flagCount);
-        }else {
+            setFlagCount(flagCount);
+        } else {
+            changeMessageText(BotConfig.getStringProperty("sapperBot.message.outOfFlags"));
             return;
         }
 
         keyboard.get(y).get(x).setText(newIcon);
 
-        if (isWin(keyboard)){
+        if (isWin(keyboard)) {
             win();
         }
 
     }
 
+    private static void incrementCountOfFlags() {
+        setFlagCount(getFlagCount(toolButton.getCallbackData()) + 1);
+    }
+
+
     private static void win() {
         removeKeyboard();
-        resultMessage = BotConfig.getStringProperty("sapperBot.message.win");
+        messageText = BotConfig.getStringProperty("sapperBot.message.win");
+        logger.info(getUserName() + " won a game!");
+    }
+
+    private static void removeKeyboard() {
+        message.getReplyMarkup().getKeyboard().clear();
     }
 
     private static boolean isWin(List<List<InlineKeyboardButton>> keyboard) {
@@ -128,11 +157,11 @@ class GameLogic {
         return true;
     }
 
-    private static boolean flagSelected(InlineKeyboardButton toolButton) {
+    private static boolean flagSelected() {
         return toolButton.getText().equals(Emoji.flag);
     }
 
-    private static void changeTool(InlineKeyboardButton toolButton) {
+    private static void changeTool() {
         String tool = toolButton.getText();
         toolButton.setText(tool.equals(Emoji.flag) ? Emoji.magnifier : Emoji.flag);
     }
@@ -141,15 +170,15 @@ class GameLogic {
         return Integer.valueOf(callbackQueryData.split(" ")[1]);
     }
 
-    private static void setFlagCount(InlineKeyboardButton button, int value) {
-        button.setCallbackData(button.getCallbackData().split(" ")[0] + " " + value);
+    private static void setFlagCount(int value) {
+        toolButton.setCallbackData(toolButton.getCallbackData().split(" ")[0] + " " + value);
     }
 
     private static boolean isTool(String callbackQueryData) {
         return callbackQueryData.split(" ")[0].equals(Command.CHANGE_TOOL.name());
     }
 
-    private static InlineKeyboardButton getToolButton(List<List<InlineKeyboardButton>> keyboard) {
+    private static InlineKeyboardButton getToolButton() {
         return keyboard.get(keyboard.size() - 1).get(0);
     }
 
@@ -166,7 +195,7 @@ class GameLogic {
         return callbackQueryData.equals(Command.NULL.name());
     }
 
-    private static List<List<InlineKeyboardButton>> getGameKeyboard(List<List<InlineKeyboardButton>> keyboard) {
+    private static List<List<InlineKeyboardButton>> getGameKeyboard() {
         List<List<InlineKeyboardButton>> gameKeyboard = new ArrayList<>(keyboard);
         gameKeyboard.remove(gameKeyboard.size() - 1);
 
@@ -180,7 +209,7 @@ class GameLogic {
                 openCell(y, x, gameKeyboard);
                 break;
             case DEFEAT:
-                endGame();
+                endGame(gameKeyboard);
                 break;
             case OPEN:
                 openCell(y, x, gameKeyboard); // ?only value?
@@ -188,9 +217,14 @@ class GameLogic {
         }
     }
 
-    private static void endGame() {
-        removeKeyboard();
-        resultMessage = BotConfig.getStringProperty("sapperBot.message.lose");
+    private static void endGame(List<List<InlineKeyboardButton>> gameKeyboard) {
+        disableKeyboard(gameKeyboard);
+        messageText = BotConfig.getStringProperty("sapperBot.message.lose");
+        logger.info(getUserName() + " lost the game =(");
+    }
+
+    private static String getUserName(){
+        return user.getUserName() + " (" + user.getFirstName() + " " + user.getLastName() + ")";
     }
 
     private static void openCell(int y, int x, List<List<InlineKeyboardButton>> gameKeyboard) {
@@ -199,6 +233,10 @@ class GameLogic {
 
         if (isOpened(callbackQueryData)) {
             return;
+        }
+
+        if (hasFlag(cell.getText())) {
+            incrementCountOfFlags();
         }
 
         String value = getValue(callbackQueryData);
@@ -242,24 +280,27 @@ class GameLogic {
         elements[2] = command != null ? command.name() : elements[2];
         elements[3] = value != null ? String.valueOf(value) : elements[3];
         String newCallbackQueryData = String.join(" ", elements);
-        //logger.info(newCallbackQueryData);
         gameKeyboard.get(y).get(x).setCallbackData(newCallbackQueryData);
     }
 
     private static void fillGameField(int y1, int x1, List<List<InlineKeyboardButton>> gameKeyboard) {
         int keyboardHeight = getHeight(gameKeyboard);
         int keyboardWidth = getWidth(gameKeyboard);
+        LogicManager.bombCount = getBombCount();
 
         List<Cell> exclusiveCells = getCellsAroundAndCenter(y1, x1, keyboardHeight, keyboardWidth);
 
         for (int y = 0; y < keyboardHeight; y++) {
             for (int x = 0; x < keyboardWidth; x++) {
                 setCommand(y, x, gameKeyboard, Command.OPEN, 0);
-                logger.info(gameKeyboard.get(y).get(x).getCallbackData() + " ");
             }
         }
 
         setBombs(gameKeyboard, exclusiveCells);
+    }
+
+    private static int getBombCount() {
+        return Integer.valueOf(keyboard.get(0).get(0).getCallbackData().split(" ")[3]);
     }
 
     private static List<Cell> getCellsAroundAndCenter(int y1, int x1, int gameFieldHeight, int gameFieldWidth) {
@@ -306,7 +347,7 @@ class GameLogic {
     private static List<Cell> getBombCells(int gameFieldHeight, int gameFieldWidth, List<Cell> exclusiveCells) {
         List<Cell> cells = getAppropriateCells(gameFieldHeight, gameFieldWidth, exclusiveCells);
         Collections.shuffle(cells);
-        return cells.subList(0, BOMB_COUNT);
+        return cells.subList(0, bombCount);
     }
 
     private static List<Cell> getAppropriateCells(int gameFieldHeight, int gameFieldWidth, List<Cell> exclusiveCells) {
@@ -340,12 +381,22 @@ class GameLogic {
     }
 
     private static void setAroundCells(Map<Cell, Integer> cellsAround, List<List<InlineKeyboardButton>> gameField) {
-        cellsAround.forEach((k, v) -> {
-            setCommand(k.getY(), k.getX(), gameField, null, v);
-        });
+        cellsAround.forEach((k, v) -> setCommand(k.getY(), k.getX(), gameField, null, v));
     }
 
-    private static void removeKeyboard(){
-        fullKeyboard.clear();
+    private static void disableKeyboard(List<List<InlineKeyboardButton>> gameKeyboard) {
+        for (List<InlineKeyboardButton> y : gameKeyboard) {
+            for (InlineKeyboardButton x : y) {
+                if (isOpened(x.getCallbackData())) {
+                    continue;
+                }
+
+                if (getCommand(x.getCallbackData()) == Command.DEFEAT) {
+                    x.setText(Emoji.bomb);
+                }
+                x.setCallbackData(Command.NULL.name());
+            }
+        }
+        toolButton.setCallbackData(Command.NULL.name());
     }
 }

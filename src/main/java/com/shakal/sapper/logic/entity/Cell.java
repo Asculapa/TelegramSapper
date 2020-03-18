@@ -1,4 +1,4 @@
-package com.shakal.SapperBot;
+package com.shakal.sapper.logic.entity;
 
 import java.util.Objects;
 
@@ -11,7 +11,7 @@ public class Cell {
         this.y = y;
     }
 
-    static Cell of(int y, int x){
+    public static Cell of(int y, int x){
         return new Cell(y, x);
     }
 
