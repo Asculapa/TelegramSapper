@@ -21,7 +21,7 @@ public class Main {
         } catch (TelegramApiException e) {
             e.printStackTrace();
         }
-
         logger.info("Bot successfully launched");
+
     }
 }
